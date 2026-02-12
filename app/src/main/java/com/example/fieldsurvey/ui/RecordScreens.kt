@@ -43,78 +43,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun RecordScreen(viewModel: SurveyViewModel) {
-    val lineType by viewModel.lineType.collectAsState()
-    val mileageText by viewModel.mileageText.collectAsState()
-    val depthText by viewModel.depthText.collectAsState()
-    val photoPath by viewModel.photoPath.collectAsState()
-    val error by viewModel.error.collectAsState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("现场记录", style = MaterialTheme.typography.titleLarge)
-
-        if (photoPath.isBlank()) {
-            CameraCapture(
-                modifier = Modifier.fillMaxWidth(),
-                onPhotoSaved = { viewModel.updatePhotoPath(it) }
-            )
-        } else {
-            Image(
-                painter = rememberAsyncImagePainter(photoPath),
-                contentDescription = "photo",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(240.dp),
-                contentScale = ContentScale.Crop
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { viewModel.updatePhotoPath("") }) {
-                    Text("重拍")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        LineTypeField(lineType = lineType, onChanged = viewModel::updateLineType)
-
-        OutlinedTextField(
-            value = mileageText,
-            onValueChange = viewModel::updateMileageText,
-            label = { Text("里程 (m)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        val dk = viewModel.dkPreview()
-        if (dk.isNotBlank()) {
-            Text("DK: $dk")
-        }
-
-        OutlinedTextField(
-            value = depthText,
-            onValueChange = viewModel::updateDepthText,
-            label = { Text("深度 (m)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        if (error.isNotBlank()) {
-            Text(error, color = MaterialTheme.colorScheme.error)
-        }
-
-        Button(onClick = viewModel::saveRecord, modifier = Modifier.fillMaxWidth()) {
-            Text("保存")
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,7 +50,6 @@ fun RecordListScreen(viewModel: SurveyViewModel) {
     val records by viewModel.records.collectAsState()
     val filterStartDate by viewModel.filterStartDate.collectAsState()
     val filterEndDate by viewModel.filterEndDate.collectAsState()
-    val filterLineType by viewModel.filterLineType.collectAsState()
     val filterMileageMin by viewModel.filterMileageMinText.collectAsState()
     val filterMileageMax by viewModel.filterMileageMaxText.collectAsState()
     val context = LocalContext.current
@@ -152,8 +79,6 @@ fun RecordListScreen(viewModel: SurveyViewModel) {
                 Text(filterEndDate?.toString() ?: "结束日期")
             }
         }
-
-        LineTypeFilterField(lineType = filterLineType, onChanged = viewModel::updateFilterLineType)
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
@@ -206,17 +131,29 @@ fun RecordListScreen(viewModel: SurveyViewModel) {
             items(records) { record ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("${record.lineType}  ${record.mileageDk}  深度 ${record.depthM}m")
-                        Text(formatTime(record.createdAt))
-                        if (record.photoPath.isNotBlank()) {
-                            Image(
-                                painter = rememberAsyncImagePainter(record.photoPath),
-                                contentDescription = "item photo",
+                        Text("${record.mileageDk}", style = MaterialTheme.typography.titleSmall)
+                        Text(formatTime(record.createdAt), style = MaterialTheme.typography.bodySmall)
+
+                        // 显示照片
+                        val photoPaths = record.photoPaths.split(";").filter { it.isNotBlank() }
+                        if (photoPaths.isNotEmpty()) {
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(120.dp),
-                                contentScale = ContentScale.Crop
-                            )
+                                    .height(100.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                photoPaths.take(3).forEach { photoPath ->
+                                    Image(
+                                        painter = rememberAsyncImagePainter(photoPath),
+                                        contentDescription = "item photo",
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -260,65 +197,6 @@ fun RecordListScreen(viewModel: SurveyViewModel) {
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LineTypeField(lineType: String, onChanged: (String) -> Unit) {
-    val options = listOf("左线", "右线")
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
-            value = lineType,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("线别") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth()
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onChanged(option)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LineTypeFilterField(lineType: String, onChanged: (String) -> Unit) {
-    val options = listOf("全部", "左线", "右线")
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
-            value = lineType,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("线别筛选") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth()
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onChanged(option)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
 
 private fun formatTime(epochMillis: Long): String {
     val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")

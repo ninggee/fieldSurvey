@@ -44,7 +44,8 @@ import java.io.File
 @Composable
 fun CameraCapture(
     modifier: Modifier = Modifier,
-    onPhotoSaved: (String) -> Unit
+    onPhotoSaved: (String) -> Unit,
+    onTakePhoto: (() -> Unit) -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -76,7 +77,28 @@ fun CameraCapture(
 
     val imageCapture = remember { ImageCapture.Builder().build() }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // 暴露拍照功能
+    LaunchedEffect(imageCapture) {
+        onTakePhoto {
+            val file = createPhotoFile(context)
+            val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
+            imageCapture.takePicture(
+                outputOptions,
+                ContextCompat.getMainExecutor(context),
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onError(exception: ImageCaptureException) {
+                        Log.e("CameraCapture", "Photo capture failed", exception)
+                    }
+
+                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                        onPhotoSaved(file.absolutePath)
+                    }
+                }
+            )
+        }
+    }
+
+    Box(modifier = modifier) {
         AndroidView(
             modifier = Modifier
                 .fillMaxWidth()
@@ -121,27 +143,6 @@ fun CameraCapture(
                 previewView
             }
         )
-
-
-        Button(onClick = {
-            val file = createPhotoFile(context)
-            val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
-            imageCapture.takePicture(
-                outputOptions,
-                ContextCompat.getMainExecutor(context),
-                object : ImageCapture.OnImageSavedCallback {
-                    override fun onError(exception: ImageCaptureException) {
-                        Log.e("CameraCapture", "Photo capture failed", exception)
-                    }
-
-                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                        onPhotoSaved(file.absolutePath)
-                    }
-                }
-            )
-        }) {
-            Text("拍照")
-        }
     }
 }
 

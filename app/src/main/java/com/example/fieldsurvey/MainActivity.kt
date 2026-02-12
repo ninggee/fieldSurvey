@@ -28,7 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fieldsurvey.ui.RecordListScreen
-import com.example.fieldsurvey.ui.RecordScreen
+import com.example.fieldsurvey.ui.CameraPhotoInputScreen
 import com.example.fieldsurvey.ui.SurveyViewModel
 import com.example.fieldsurvey.ui.theme.FieldSurveyTheme
 import kotlinx.coroutines.launch
@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
                                 .padding(innerPadding)
                         ) {
                             if (selected == NavItem.Record) {
-                                RecordScreen(viewModel = vm)
+                                CameraPhotoInputScreen(viewModel = vm)
                             } else {
                                 RecordListScreen(viewModel = vm)
                             }
