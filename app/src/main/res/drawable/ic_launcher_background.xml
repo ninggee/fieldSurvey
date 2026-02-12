@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Light blue background -->
+    <path
+        android:fillColor="#4A90E2"
+        android:pathData="M0,0h108v108h-108z" />
+
+    <!-- Dark blue overlay for gradient effect -->
+    <path
+        android:fillColor="#2E5DB3"
+        android:pathData="M0,54h108v54h-108z"
+        android:fillAlpha="0.4" />
+
+    <!-- Subtle decorative circles for visual interest -->
+    <!-- Circle at (15, 15) with radius 8 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.15"
+        android:pathData="M7,15 A8,8 0 1,0 23,15 A8,8 0 1,0 7,15" />
+
+    <!-- Circle at (95, 25) with radius 6 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.1"
+        android:pathData="M89,25 A6,6 0 1,0 101,25 A6,6 0 1,0 89,25" />
+
+    <!-- Circle at (20, 85) with radius 7 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.12"
+        android:pathData="M13,85 A7,7 0 1,0 27,85 A7,7 0 1,0 13,85" />
+
+    <!-- Circle at (90, 90) with radius 5 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.1"
+        android:pathData="M85,90 A5,5 0 1,0 95,90 A5,5 0 1,0 85,90" />
+
+</vector>

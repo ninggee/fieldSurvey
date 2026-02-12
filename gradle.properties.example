@@ -1,0 +1,24 @@
+# gradle.properties.example
+# 此文件为模板，请复制为 gradle.properties 并按照你的环境修改
+
+# JVM内存配置（根据你的机器调整）
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+
+# 并行构建（可选，但推荐用于更快的构建）
+org.gradle.parallel=true
+
+# 离线模式（如果网络不稳定，设置为true后需要先在线构建）
+org.gradle.offline=false
+
+# AndroidX配置
+android.useAndroidX=true
+
+# R类命名空间
+android.nonTransitiveRClass=true
+
+# Kotlin代码风格
+kotlin.code.style=official
+
+# 构建缓存（可选，推荐启用以加快增量构建）
+org.gradle.caching=true
+

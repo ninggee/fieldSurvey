@@ -1,0 +1,19 @@
+# local.properties.example
+# 此文件为模板，请复制为 local.properties 并设置你的Android SDK路径
+
+# 重要：local.properties 已添加到 .gitignore，不会被提交到Git仓库
+# 每个开发人员需要根据自己的环境创建此文件
+
+# Windows 示例
+# sdk.dir=C:\Users\YourUsername\AppData\Local\Android\Sdk
+
+# macOS 示例
+# sdk.dir=/Users/YourUsername/Library/Android/sdk
+
+# Linux 示例
+# sdk.dir=/home/username/Android/Sdk
+
+# 使用环境变量（推荐）
+# 如果已设置 ANDROID_SDK_ROOT 环境变量，可以使用
+# sdk.dir=$ANDROID_SDK_ROOT
+
