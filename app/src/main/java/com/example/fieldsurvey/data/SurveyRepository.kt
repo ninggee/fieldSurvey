@@ -10,5 +10,7 @@ class SurveyRepository(private val dao: SurveyDao) {
     suspend fun listAll(): List<SurveyRecord> = dao.listAll()
 
     suspend fun findByMileage(km: Int, decimal: Double): SurveyRecord? = dao.findByMileage(km, decimal)
+
+    suspend fun deleteById(id: Long) = dao.deleteById(id)
 }
 

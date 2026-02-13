@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.fieldsurvey.ui.RecordListScreen
 import com.example.fieldsurvey.ui.CameraPhotoInputScreen
+import com.example.fieldsurvey.ui.LogExportScreen
 import com.example.fieldsurvey.ui.SurveyViewModel
 import com.example.fieldsurvey.ui.theme.FieldSurveyTheme
 import kotlinx.coroutines.launch
@@ -65,6 +66,14 @@ class MainActivity : ComponentActivity() {
                                     scope.launch { drawerState.close() }
                                 }
                             )
+                            NavigationDrawerItem(
+                                label = { Text("导出日志") },
+                                selected = selected == NavItem.LogExport,
+                                onClick = {
+                                    selected = NavItem.LogExport
+                                    scope.launch { drawerState.close() }
+                                }
+                            )
                         }
                     }
                 ) {
@@ -86,10 +95,10 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .padding(innerPadding)
                         ) {
-                            if (selected == NavItem.Record) {
-                                CameraPhotoInputScreen(viewModel = vm)
-                            } else {
-                                RecordListScreen(viewModel = vm)
+                            when (selected) {
+                                NavItem.Record -> CameraPhotoInputScreen(viewModel = vm)
+                                NavItem.List -> RecordListScreen(viewModel = vm)
+                                NavItem.LogExport -> LogExportScreen(viewModel = vm)
                             }
                         }
                     }
@@ -101,5 +110,6 @@ class MainActivity : ComponentActivity() {
 
 private enum class NavItem {
     Record,
-    List
+    List,
+    LogExport
 }

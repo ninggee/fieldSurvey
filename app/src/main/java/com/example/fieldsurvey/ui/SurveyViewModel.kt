@@ -2,6 +2,8 @@ package com.example.fieldsurvey.ui
 
 import android.app.Application
 import android.content.ContentResolver
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.fieldsurvey.data.SurveyDatabase
@@ -145,9 +147,17 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
     private val _error = MutableStateFlow("")
     val error: StateFlow<String> = _error.asStateFlow()
 
-    // 保存成功事件（用于显示 Toast）
-    private val _saveSuccessEvent = Channel<Unit>()
+    // 保存成功事件（用于显示 Snackbar）
+    private val _saveSuccessEvent = Channel<Unit>(Channel.BUFFERED)
     val saveSuccessEvent = _saveSuccessEvent.receiveAsFlow()
+
+    // 记录无变化事件（用于显示"没有更新"提示）
+    private val _noChangeEvent = Channel<Unit>(Channel.BUFFERED)
+    val noChangeEvent = _noChangeEvent.receiveAsFlow()
+
+    // 操作状态管理
+    private val _isOperating = MutableStateFlow(false)
+    val isOperating: StateFlow<Boolean> = _isOperating.asStateFlow()
 
     private val _records = MutableStateFlow<List<SurveyRecord>>(emptyList())
     val records: StateFlow<List<SurveyRecord>> = _records.asStateFlow()
@@ -164,8 +174,28 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
     private val _filterMileageMaxText = MutableStateFlow("")
     val filterMileageMaxText: StateFlow<String> = _filterMileageMaxText.asStateFlow()
 
+
+    // 记录选中状态
+    private val _selectedRecordIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedRecordIds: StateFlow<Set<Long>> = _selectedRecordIds.asStateFlow()
+
+    // 导出进度和日志
+    private val _exportProgress = MutableStateFlow(0)
+    val exportProgress: StateFlow<Int> = _exportProgress.asStateFlow()
+
+    private val _exportLog = MutableStateFlow<List<String>>(emptyList())
+    val exportLog: StateFlow<List<String>> = _exportLog.asStateFlow()
+
+    // 日志文件列表相关
+    private val _logFiles = MutableStateFlow<List<java.io.File>>(emptyList())
+    val logFiles: StateFlow<List<java.io.File>> = _logFiles.asStateFlow()
+
+    private val _selectedLogFiles = MutableStateFlow<Set<java.io.File>>(emptySet())
+    val selectedLogFiles: StateFlow<Set<java.io.File>> = _selectedLogFiles.asStateFlow()
+
     init {
         refreshList()
+        loadLogFiles()
     }
 
     // ==================== 里程管理方法 ====================
@@ -193,11 +223,18 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         _currentMileageDk.value = MileageManager.generateDkString(km, decimal)
     }
 
-    fun nextMileage() {
+
+    fun previousMileage() {
+        // 如果正在操作，则直接返回
+        if (_isOperating.value) {
+            _error.value = "操作进行中，请稍候"
+            return
+        }
+
         val km = _mileageKmText.value.toIntOrNull() ?: 0
         val decimal = _mileageDecimalText.value.toDoubleOrNull() ?: 0.0
 
-        val mileageInfo = MileageManager.getNextMileage(km, decimal)
+        val mileageInfo = MileageManager.getPreviousMileage(km, decimal)
 
         // 自动填充里程字段
         _mileageKmText.value = mileageInfo.km.toString()
@@ -208,11 +245,17 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         loadRecordByMileage(mileageInfo.km, mileageInfo.decimal)
     }
 
-    fun previousMileage() {
+    fun nextMileage() {
+        // 如果正在操作，则直接返回
+        if (_isOperating.value) {
+            _error.value = "操作进行中，请稍候"
+            return
+        }
+
         val km = _mileageKmText.value.toIntOrNull() ?: 0
         val decimal = _mileageDecimalText.value.toDoubleOrNull() ?: 0.0
 
-        val mileageInfo = MileageManager.getPreviousMileage(km, decimal)
+        val mileageInfo = MileageManager.getNextMileage(km, decimal)
 
         // 自动填充里程字段
         _mileageKmText.value = mileageInfo.km.toString()
@@ -454,6 +497,12 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
     // ==================== 照片管理方法 ====================
 
     fun saveRecord() {
+        // 如果正在操作，则直接返回
+        if (_isOperating.value) {
+            _error.value = "操作进行中，请稍候"
+            return
+        }
+
         val km = _mileageKmText.value.toIntOrNull()
         if (km == null) {
             _error.value = "请输入里程千位"
@@ -505,50 +554,46 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
             createdAt = System.currentTimeMillis()
         )
 
+        // ✅ 设置操作状态为进行中
+        _isOperating.value = true
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                if (currentId != null && currentId > 0) {
-                    // 编辑已有记录，检查内容是否改变
-                    val existingRecord = repository.findByMileage(km, decimal)
-                    if (existingRecord != null && isRecordContentEqual(existingRecord, record)) {
-                        // 内容相同，只显示 Toast，不保存
-                        _saveSuccessEvent.trySend(Unit)
-                    } else {
-                        // 内容不同，更新记录
-                        repository.update(record)
-                        withContext(Dispatchers.Main) {
-                            _saveSuccessEvent.trySend(Unit)
-                            refreshList()
-                        }
-                    }
-                } else {
-                    // 新记录，先检查是否已存在同里程的记录
-                    val existingRecord = repository.findByMileage(km, decimal)
-                    if (existingRecord != null) {
+                val existing = repository.findByMileage(km, decimal)
+
+                when {
+                    existing != null -> {
                         // 同里程已存在，比较内容
-                        if (isRecordContentEqual(existingRecord, record)) {
-                            // 内容相同，只显示 Toast，不保存
-                            _saveSuccessEvent.trySend(Unit)
+                        if (isRecordContentEqual(existing, record)) {
+                            // ✅ 内容相同，不更新数据库，发送"无变化"事件
+                            _noChangeEvent.send(Unit)
                         } else {
-                            // 内容不同，更新记录
-                            repository.update(record.copy(id = existingRecord.id))
+                            // ✅ 内容不同，更新记录，发送"成功"事件
+                            repository.update(record.copy(id = existing.id))
                             withContext(Dispatchers.Main) {
-                                _saveSuccessEvent.trySend(Unit)
                                 refreshList()
                             }
-                        }
-                    } else {
-                        // 不存在，插入新记录
-                        repository.insert(record)
-                        withContext(Dispatchers.Main) {
-                            _saveSuccessEvent.trySend(Unit)
-                            refreshList()
+                            _saveSuccessEvent.send(Unit)
                         }
                     }
+                    else -> {
+                        // ✅ 不存在，插入新记录，发送"成功"事件
+                        repository.insert(record)
+                        withContext(Dispatchers.Main) {
+                            refreshList()
+                        }
+                        _saveSuccessEvent.send(Unit)
+                    }
                 }
+
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     _error.value = "保存失败: ${e.message}"
+                }
+            } finally {
+                // ✅ 操作完成后，无论成功还是失败，都要设置状态为完成
+                withContext(Dispatchers.Main) {
+                    _isOperating.value = false
                 }
             }
         }
@@ -608,6 +653,46 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         _filterMileageMaxText.value = value
     }
 
+
+    // 记录选择方法
+    fun toggleRecordSelection(recordId: Long) {
+        val current = _selectedRecordIds.value.toMutableSet()
+        if (current.contains(recordId)) {
+            current.remove(recordId)
+        } else {
+            current.add(recordId)
+        }
+        _selectedRecordIds.value = current
+    }
+
+    fun selectAllRecords() {
+        _selectedRecordIds.value = _records.value.map { it.id }.toSet()
+    }
+
+    fun clearSelection() {
+        _selectedRecordIds.value = emptySet()
+    }
+
+    fun deleteSelectedRecords() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _selectedRecordIds.value.forEach { id ->
+                    repository.deleteById(id)
+                }
+                withContext(Dispatchers.Main) {
+                    _selectedRecordIds.value = emptySet()
+                    refreshList()
+                    // ✅ 用 send() 代替 trySend()
+                    _saveSuccessEvent.send(Unit)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _error.value = "删除失败: ${e.message}"
+                }
+            }
+        }
+    }
+
     fun applyFilters() {
         refreshList()
     }
@@ -620,13 +705,75 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         refreshList()
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     fun exportCurrentList(resolver: ContentResolver, fileName: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            val list = _records.value
-            val ok = ExcelExporter.export(resolver, list, fileName)
-            withContext(Dispatchers.Main) {
-                onDone(ok)
+            try {
+                val logs = mutableListOf<String>()
+                logs.add("========== 导出开始 ==========")
+                logs.add("时间: ${System.currentTimeMillis()}")
+                logs.add("文件名: $fileName")
+
+                // 需求 4：按里程排序
+                val list = _records.value
+                    .sortedBy { it.mileageKm + it.mileageDecimal }
+
+                logs.add("待导出记录数: ${list.size}")
+                _exportLog.value = logs
+                _exportProgress.value = 10
+
+                // 调用导出器，传递进度回调
+                val ok = ExcelExporter.export(resolver, list, fileName) { progress ->
+                    _exportProgress.value = progress
+                    val updatedLogs = logs.toMutableList()
+                    updatedLogs.add("导出进度: $progress%")
+                    _exportLog.value = updatedLogs
+                }
+
+                withContext(Dispatchers.Main) {
+                    if (ok) {
+                        logs.add("导出成功")
+                        _exportProgress.value = 100
+                    } else {
+                        logs.add("导出失败")
+                        _exportProgress.value = -1
+                    }
+                    logs.add("========== 导出结束 ==========")
+                    _exportLog.value = logs
+
+                    // 保存日志到文件
+                    saveLogsToFile(logs)
+
+                    onDone(ok)
+                }
+            } catch (e: Exception) {
+                val logs = _exportLog.value.toMutableList()
+                logs.add("导出异常: ${e.message}")
+                logs.add(e.stackTraceToString())
+                logs.add("========== 导出结束(异常) ==========")
+                withContext(Dispatchers.Main) {
+                    _exportLog.value = logs
+                    _exportProgress.value = -1
+                    saveLogsToFile(logs)
+                    onDone(false)
+                }
             }
+        }
+    }
+
+    private fun saveLogsToFile(logs: List<String>) {
+        try {
+            val context = getApplication<Application>()
+            val logsDir = java.io.File(context.filesDir, "export_logs")
+            if (!logsDir.exists()) {
+                logsDir.mkdirs()
+            }
+
+            val logFile = java.io.File(logsDir, "export_log_${System.currentTimeMillis()}.txt")
+            logFile.writeText(logs.joinToString("\n"))
+        } catch (e: Exception) {
+            // 日志保存失败，不影响主流程
+            e.printStackTrace()
         }
     }
 
@@ -644,8 +791,10 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         val zone = ZoneId.systemDefault()
         val startDate = _filterStartDate.value
         val endDate = _filterEndDate.value
-        val minMileage = _filterMileageMinText.value.toIntOrNull()
-        val maxMileage = _filterMileageMaxText.value.toIntOrNull()
+
+        // 解析里程范围
+        val minMileage = parseMileage(_filterMileageMinText.value)
+        val maxMileage = parseMileage(_filterMileageMaxText.value)
 
         val startMillis = startDate?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
         val endMillis = endDate?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()?.minus(1)
@@ -653,9 +802,156 @@ class SurveyViewModel(app: Application) : AndroidViewModel(app) {
         return records.filter { record ->
             if (startMillis != null && record.createdAt < startMillis) return@filter false
             if (endMillis != null && record.createdAt > endMillis) return@filter false
-            if (minMileage != null && record.mileageKm < minMileage) return@filter false
-            if (maxMileage != null && record.mileageKm > maxMileage) return@filter false
+
+            val recordMileage = record.mileageKm + record.mileageDecimal
+
+            if (minMileage != null && recordMileage < minMileage) return@filter false
+            if (maxMileage != null && recordMileage > maxMileage) return@filter false
             true
+        }
+    }
+
+    // 解析DK格式里程（如 "DK838+012.5"） 返回总里程数（如 838.0125）
+    private fun parseMileage(dkString: String): Double? {
+        if (dkString.isBlank()) return null
+
+        return try {
+            val normalized = dkString.trim().uppercase()
+            // 移除 "DK" 前缀
+            val withoutDK = if (normalized.startsWith("DK")) {
+                normalized.substring(2)
+            } else {
+                normalized
+            }
+
+            // 处理 "+" 符号
+            val parts = if (withoutDK.contains("+")) {
+                withoutDK.split("+")
+            } else {
+                listOf(withoutDK)
+            }
+
+            val kmPart = parts[0].toIntOrNull() ?: return null
+            val decimalPart = if (parts.size > 1) {
+                parts[1].toDoubleOrNull() ?: 0.0
+            } else {
+                0.0
+            }
+
+            (kmPart + decimalPart / 1000.0)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // ==================== 日志文件管理 ====================
+
+    fun loadLogFiles() {
+        try {
+            val context = getApplication<Application>()
+            val logsDir = java.io.File(context.filesDir, "export_logs")
+            if (!logsDir.exists()) {
+                logsDir.mkdirs()
+            }
+
+            val files = logsDir.listFiles()?.filter { it.isFile && it.extension == "txt" }?.sortedByDescending { it.lastModified() } ?: emptyList()
+            _logFiles.value = files
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun toggleLogFileSelection(file: java.io.File) {
+        val current = _selectedLogFiles.value.toMutableSet()
+        if (current.contains(file)) {
+            current.remove(file)
+        } else {
+            current.add(file)
+        }
+        _selectedLogFiles.value = current
+    }
+
+    fun selectAllLogFiles() {
+        _selectedLogFiles.value = _logFiles.value.toSet()
+    }
+
+    fun clearLogFileSelection() {
+        _selectedLogFiles.value = emptySet()
+    }
+
+    fun deleteSelectedLogFiles() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _selectedLogFiles.value.forEach { file ->
+                    file.delete()
+                }
+                withContext(Dispatchers.Main) {
+                    _selectedLogFiles.value = emptySet()
+                    loadLogFiles()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    fun exportLogsToFile(resolver: android.content.ContentResolver, outputFileName: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val logsToExport = if (_selectedLogFiles.value.isNotEmpty()) {
+                    _selectedLogFiles.value.toList()
+                } else {
+                    _logFiles.value
+                }
+
+                if (logsToExport.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        onDone(false)
+                    }
+                    return@launch
+                }
+
+                // 合并所有选中的日志内容
+                val combinedLogs = mutableListOf<String>()
+                combinedLogs.add("========== 日志导出 ==========")
+                combinedLogs.add("导出时间: ${System.currentTimeMillis()}")
+                combinedLogs.add("导出日志数: ${logsToExport.size}")
+                combinedLogs.add("")
+
+                logsToExport.forEach { file ->
+                    combinedLogs.add("【${file.name}】")
+                    combinedLogs.addAll(file.readLines())
+                    combinedLogs.add("")
+                }
+
+                combinedLogs.add("========== 日志导出结束 ==========")
+
+                // 保存到下载目录
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, outputFileName)
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
+                }
+                val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { output ->
+                        output.write(combinedLogs.joinToString("\n").toByteArray())
+                    }
+                    withContext(Dispatchers.Main) {
+                        onDone(true)
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onDone(false)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    onDone(false)
+                }
+            }
         }
     }
 }

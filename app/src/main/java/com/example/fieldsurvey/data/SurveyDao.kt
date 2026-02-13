@@ -21,5 +21,8 @@ interface SurveyDao {
 
     @Query("SELECT * FROM survey_records WHERE mileageKm = :km AND mileageDecimal = :decimal LIMIT 1")
     suspend fun findByMileage(km: Int, decimal: Double): SurveyRecord?
+
+    @Query("DELETE FROM survey_records WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 

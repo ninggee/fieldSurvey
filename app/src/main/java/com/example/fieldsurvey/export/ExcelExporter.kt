@@ -31,7 +31,8 @@ object ExcelExporter {
     fun export(
         resolver: ContentResolver,
         records: List<SurveyRecord>,
-        fileName: String
+        fileName: String,
+        onProgress: ((Int) -> Unit)? = null
     ): Boolean {
         val workbook = XSSFWorkbook()
         val sheet = workbook.createSheet("records")
@@ -58,6 +59,10 @@ object ExcelExporter {
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault())
 
         records.forEachIndexed { index, record ->
+            // 计算进度（10-90%）
+            val progress = 10 + (index * 80 / records.size)
+            onProgress?.invoke(progress)
+
             val rowIndex = index + 1
             val row = sheet.createRow(rowIndex)
 
@@ -148,11 +153,13 @@ object ExcelExporter {
             put(MediaStore.Downloads.DISPLAY_NAME, fileName)
             put(MediaStore.Downloads.MIME_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         }
+        onProgress?.invoke(90)
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
         resolver.openOutputStream(uri)?.use { output ->
             workbook.write(output)
         } ?: return false
         workbook.close()
+        onProgress?.invoke(100)
         return true
     }
 }

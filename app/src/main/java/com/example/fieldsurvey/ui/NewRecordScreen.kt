@@ -27,6 +27,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,7 +50,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import android.widget.Toast
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.collectLatest
 
@@ -86,269 +90,308 @@ fun NewRecordScreen(viewModel: SurveyViewModel) {
     val steelRailSevereCount by viewModel.steelRailSevereCountText.collectAsState()
 
     var showPhotoPreview by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
 
-    // 监听保存成功事件
+    // 收集操作状态
+    val isOperating by viewModel.isOperating.collectAsState()
+
+    // ✅ 创建 Snackbar 状态
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // ✅ 监听保存成功事件，显示 Snackbar
     LaunchedEffect(Unit) {
-        viewModel.saveSuccessEvent.collectLatest {
-            Toast.makeText(context, "保存成功", Toast.LENGTH_SHORT).show()
+        viewModel.saveSuccessEvent.collect {
+            snackbarHostState.showSnackbar(
+                message = "✓ 保存成功",
+                duration = SnackbarDuration.Short
+            )
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("现场记录", style = MaterialTheme.typography.titleLarge)
-
-        // ==================== 照片框部分 ====================
-        Text("照片 (${photoMap.size}/9)", style = MaterialTheme.typography.titleMedium)
-
-        PhotoGridWithLabels(
-            photoMap = photoMap,
-            photoPositions = SurveyViewModel.PHOTO_POSITIONS,
-            onPhotoClick = { showPhotoPreview = it },
-            onRemovePhotoClick = { position -> viewModel.removePhotoAtPosition(position) }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // ==================== 钢轨重伤个数 ====================
-        OutlinedTextField(
-            value = steelRailSevereCount,
-            onValueChange = { viewModel.updateSteelRailSevereCountText(it) },
-            label = { Text("钢轨重伤个数") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ==================== 里程部分 ====================
-        Text("里程信息", style = MaterialTheme.typography.titleMedium)
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = mileageKm,
-                onValueChange = { viewModel.updateMileageKmText(it) },
-                label = { Text("千位") },
-                placeholder = { Text("如: 838") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            Text("+", style = MaterialTheme.typography.headlineSmall)
-            OutlinedTextField(
-                value = mileageDecimal,
-                onValueChange = { viewModel.updateMileageDecimalText(it) },
-                label = { Text("其他位") },
-                placeholder = { Text("如: 12.5") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
+    // ✅ 监听无变化事件，显示不同的 Snackbar
+    LaunchedEffect(Unit) {
+        viewModel.noChangeEvent.collect {
+            snackbarHostState.showSnackbar(
+                message = "ℹ 记录无变化",
+                duration = SnackbarDuration.Short
             )
         }
+    }
 
-        Text(
-            "完整里程: $currentMileageDk",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Row(
+    // ✅ 使用 Scaffold 包装整个界面，在底部显示 Snackbar
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = Modifier.fillMaxSize()
+    ) { paddingValues ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            OutlinedButton(onClick = viewModel::previousMileage, modifier = Modifier.weight(1f)) {
-                Text("上一个")
+            Text("现场记录", style = MaterialTheme.typography.titleLarge)
+
+            // ==================== 照片框部分 ====================
+            Text("照片 (${photoMap.size}/9)", style = MaterialTheme.typography.titleMedium)
+
+            PhotoGridWithLabels(
+                photoMap = photoMap,
+                photoPositions = SurveyViewModel.PHOTO_POSITIONS,
+                onPhotoClick = { showPhotoPreview = it },
+                onRemovePhotoClick = { position -> viewModel.removePhotoAtPosition(position) }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+
+
+            // ==================== 里程部分 ====================
+            Text("里程信息", style = MaterialTheme.typography.titleMedium)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = mileageKm,
+                    onValueChange = { viewModel.updateMileageKmText(it) },
+                    label = { Text("千位") },
+                    placeholder = { Text("如: 838") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                Text("+", style = MaterialTheme.typography.headlineSmall)
+                OutlinedTextField(
+                    value = mileageDecimal,
+                    onValueChange = { viewModel.updateMileageDecimalText(it) },
+                    label = { Text("其他位") },
+                    placeholder = { Text("如: 12.5") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
             }
-            OutlinedButton(onClick = viewModel::nextMileage, modifier = Modifier.weight(1f)) {
-                Text("下一个")
+
+            Text(
+                "完整里程: $currentMileageDk",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ==================== 钢轨重伤个数 ====================
+            OutlinedTextField(
+                value = steelRailSevereCount,
+                onValueChange = { viewModel.updateSteelRailSevereCountText(it) },
+                label = { Text("钢轨重伤个数") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ==================== 状态字段 ====================
+            Text("状态信息", style = MaterialTheme.typography.titleMedium)
+
+            BooleanField("掉块擦伤", hasChipping) { viewModel.updateHasChipping(it) }
+            BooleanField("磨损", hasWear) { viewModel.updateHasWear(it) }
+            BooleanField("其他", hasOther) { viewModel.updateHasOther(it) }
+            BooleanField("砼枕换新段落", hasConcreteNewSegment) { viewModel.updateHasConcreteNewSegment(it) }
+            BooleanField("无缝线路起始里程", hasSeamlessStart) { viewModel.updateHasSeamlessStart(it) }
+            BooleanField("脱线事故起始里程", hasDerailmentStart) { viewModel.updateHasDerailmentStart(it) }
+            BooleanField("道床严重板结段落", hasSubgradeCompaction) { viewModel.updateHasSubgradeCompaction(it) }
+            BooleanField("有砟梁/明桥面木枕段落", hasBallastedBeam) { viewModel.updateHasBallastedBeam(it) }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ==================== 轨道相关字段 ====================
+            Text("轨道信息", style = MaterialTheme.typography.titleMedium)
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = leftRailChippingDepth,
+                    onValueChange = { viewModel.updateLeftRailChippingDepthText(it) },
+                    label = { Text("左轨头掉块深度(m)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = rightRailChippingDepth,
+                    onValueChange = { viewModel.updateRightRailChippingDepthText(it) },
+                    label = { Text("右轨头掉块深度(m)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
             }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = leftRailScratchDepth,
+                    onValueChange = { viewModel.updateLeftRailScratchDepthText(it) },
+                    label = { Text("左轨擦伤深度(m)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = leftRailScratchCount,
+                    onValueChange = { viewModel.updateLeftRailScratchCountText(it) },
+                    label = { Text("左轨擦伤个数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = rightRailScratchDepth,
+                    onValueChange = { viewModel.updateRightRailScratchDepthText(it) },
+                    label = { Text("右轨擦伤深度(m)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = rightRailScratchCount,
+                    onValueChange = { viewModel.updateRightRailScratchCountText(it) },
+                    label = { Text("右轨擦伤个数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ==================== 枕木相关字段 ====================
+            Text("枕木信息", style = MaterialTheme.typography.titleMedium)
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = concreteSleeperDamageCount,
+                    onValueChange = { viewModel.updateConcreteSleeperDamageCountText(it) },
+                    label = { Text("砼枕严重伤损个数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = woodenSleeperDamageCount,
+                    onValueChange = { viewModel.updateWoodenSleeperDamageCountText(it) },
+                    label = { Text("木枕严重伤损个数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = concreteClipFailureCount,
+                    onValueChange = { viewModel.updateConcreteClipFailureCountText(it) },
+                    label = { Text("砼枕扣件失效套数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = woodenClipFailureCount,
+                    onValueChange = { viewModel.updateWoodenClipFailureCountText(it) },
+                    label = { Text("木枕扣件失效套数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ==================== 其他设备信息 ====================
+            Text("其他设备", style = MaterialTheme.typography.titleMedium)
+
+            OutlinedTextField(
+                value = bedThickness,
+                onValueChange = { viewModel.updateBedThicknessText(it) },
+                label = { Text("道床厚度(m)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = fishplateDefectCount,
+                    onValueChange = { viewModel.updateFishplateDefectCountText(it) },
+                    label = { Text("夹板接头伤损个数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = boltDefectCount,
+                    onValueChange = { viewModel.updateBoltDefectCountText(it) },
+                    label = { Text("螺栓伤损个数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = antiClimbGoodCount,
+                    onValueChange = { viewModel.updateAntiClimbGoodCountText(it) },
+                    label = { Text("防爬器完好个数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = antiClimbSupportGoodCount,
+                    onValueChange = { viewModel.updateAntiClimbSupportGoodCountText(it) },
+                    label = { Text("防爬支撑完好个数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            OutlinedTextField(
+                value = gaugeBarGoodCount,
+                onValueChange = { viewModel.updateGaugeBarGoodCountText(it) },
+                label = { Text("轨距杆完好个数") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (error.isNotBlank()) {
+                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+
+            Button(
+                onClick = viewModel::saveRecord,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isOperating  // ✅ 当操作进行中时禁用
+            ) {
+                Text("保存记录")
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = viewModel::previousMileage,
+                    modifier = Modifier.weight(1f),
+                    enabled = !isOperating  // ✅ 当操作进行中时禁用
+                ) {
+                    Text("上一个")
+                }
+                OutlinedButton(
+                    onClick = viewModel::nextMileage,
+                    modifier = Modifier.weight(1f),
+                    enabled = !isOperating  // ✅ 当操作进行中时禁用
+                ) {
+                    Text("下一个")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ==================== 状态字段 ====================
-        Text("状态信息", style = MaterialTheme.typography.titleMedium)
-
-        BooleanField("掉块擦伤", hasChipping) { viewModel.updateHasChipping(it) }
-        BooleanField("磨损", hasWear) { viewModel.updateHasWear(it) }
-        BooleanField("其他", hasOther) { viewModel.updateHasOther(it) }
-        BooleanField("砼枕换新段落", hasConcreteNewSegment) { viewModel.updateHasConcreteNewSegment(it) }
-        BooleanField("无缝线路起始里程", hasSeamlessStart) { viewModel.updateHasSeamlessStart(it) }
-        BooleanField("脱线事故起始里程", hasDerailmentStart) { viewModel.updateHasDerailmentStart(it) }
-        BooleanField("道床严重板结段落", hasSubgradeCompaction) { viewModel.updateHasSubgradeCompaction(it) }
-        BooleanField("有砟梁/明桥面木枕段落", hasBallastedBeam) { viewModel.updateHasBallastedBeam(it) }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ==================== 轨道相关字段 ====================
-        Text("轨道信息", style = MaterialTheme.typography.titleMedium)
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = leftRailChippingDepth,
-                onValueChange = { viewModel.updateLeftRailChippingDepthText(it) },
-                label = { Text("左轨头掉块深度(m)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = rightRailChippingDepth,
-                onValueChange = { viewModel.updateRightRailChippingDepthText(it) },
-                label = { Text("右轨头掉块深度(m)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = leftRailScratchDepth,
-                onValueChange = { viewModel.updateLeftRailScratchDepthText(it) },
-                label = { Text("左轨擦伤深度(m)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = leftRailScratchCount,
-                onValueChange = { viewModel.updateLeftRailScratchCountText(it) },
-                label = { Text("左轨擦伤个数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = rightRailScratchDepth,
-                onValueChange = { viewModel.updateRightRailScratchDepthText(it) },
-                label = { Text("右轨擦伤深度(m)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = rightRailScratchCount,
-                onValueChange = { viewModel.updateRightRailScratchCountText(it) },
-                label = { Text("右轨擦伤个数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ==================== 枕木相关字段 ====================
-        Text("枕木信息", style = MaterialTheme.typography.titleMedium)
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = concreteSleeperDamageCount,
-                onValueChange = { viewModel.updateConcreteSleeperDamageCountText(it) },
-                label = { Text("砼枕严重伤损个数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = woodenSleeperDamageCount,
-                onValueChange = { viewModel.updateWoodenSleeperDamageCountText(it) },
-                label = { Text("木枕严重伤损个数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = concreteClipFailureCount,
-                onValueChange = { viewModel.updateConcreteClipFailureCountText(it) },
-                label = { Text("砼枕扣件失效套数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = woodenClipFailureCount,
-                onValueChange = { viewModel.updateWoodenClipFailureCountText(it) },
-                label = { Text("木枕扣件失效套数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ==================== 其他设备信息 ====================
-        Text("其他设备", style = MaterialTheme.typography.titleMedium)
-
-        OutlinedTextField(
-            value = bedThickness,
-            onValueChange = { viewModel.updateBedThicknessText(it) },
-            label = { Text("道床厚度(m)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = fishplateDefectCount,
-                onValueChange = { viewModel.updateFishplateDefectCountText(it) },
-                label = { Text("夹板接头伤损个数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = boltDefectCount,
-                onValueChange = { viewModel.updateBoltDefectCountText(it) },
-                label = { Text("螺栓伤损个数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = antiClimbGoodCount,
-                onValueChange = { viewModel.updateAntiClimbGoodCountText(it) },
-                label = { Text("防爬器完好个数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = antiClimbSupportGoodCount,
-                onValueChange = { viewModel.updateAntiClimbSupportGoodCountText(it) },
-                label = { Text("防爬支撑完好个数") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        OutlinedTextField(
-            value = gaugeBarGoodCount,
-            onValueChange = { viewModel.updateGaugeBarGoodCountText(it) },
-            label = { Text("轨距杆完好个数") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (error.isNotBlank()) {
-            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
-
-        Button(onClick = viewModel::saveRecord, modifier = Modifier.fillMaxWidth()) {
-            Text("保存记录")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 
     if (showPhotoPreview != null) {
